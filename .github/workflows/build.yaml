@@ -8,6 +8,7 @@ on:
     tags:
       - "*"
   pull_request:
+  workflow_dispatch:
 
 env:
   QT_VERSION: "6.8.3"
@@ -143,7 +144,7 @@ jobs:
           linuxdeployqt "$APPDIR/usr/share/applications/${APP_NAME}.desktop" \
             -appimage -bundle-non-qt-libs
 
-          mv ./*.AppImage "${APP_NAME}-${PACKAGE_VERSION}.AppImage"
+          mv ./*.AppImage "${{ env.APP_NAME }}-${{ env.PACKAGE_VERSION }}.AppImage"  #mv ./*.AppImage "${APP_NAME}-${PACKAGE_VERSION}.AppImage"
           chmod +x "${APP_NAME}-${PACKAGE_VERSION}.AppImage"
 
       - name: Check AppImage
@@ -163,7 +164,7 @@ jobs:
     environment: build
     strategy:
       matrix:
-        demo: [false, true]
+        demo: [false]
     steps:
       - name: Checkout repository
         uses: actions/checkout@v4
@@ -202,7 +203,7 @@ jobs:
 
       - name: Zip builds
         if: matrix.demo == false
-        run: zip -r -P "${{ secrets.ZIP_PASSWORD }}" "${{ env.APP_NAME }}-${{ env.PACKAGE_VERSION }}.zip" "${{ env.APP_LABEL }}-${{ env.PACKAGE_VERSION }}${{ matrix.demo && '-demo-macos' || '' }}.dmg"
+        run: zip -r "${{ env.APP_NAME }}-${{ env.PACKAGE_VERSION }}.zip" "${{ env.APP_LABEL }}-${{ env.PACKAGE_VERSION }}${{ matrix.demo && '-demo-macos' || '' }}.dmg"
 
       - name: Upload artifacts (demo)
         if: matrix.demo == true
@@ -225,7 +226,7 @@ jobs:
     environment: build
     strategy:
       matrix:
-        demo: [false, true]
+        demo: [false]
     steps:
       - name: Checkout repository
         uses: actions/checkout@v4
@@ -264,7 +265,7 @@ jobs:
 
       - name: Zip builds
         if: matrix.demo == false
-        run: zip -r -P "${{ secrets.ZIP_PASSWORD }}" "${{ env.APP_NAME }}-${{ env.PACKAGE_VERSION }}.zip" "${{ env.APP_LABEL }}-${{ env.PACKAGE_VERSION }}${{ matrix.demo && '-demo-macos' || '' }}-intel.dmg"
+        run: zip -r "${{ env.APP_NAME }}-${{ env.PACKAGE_VERSION }}.zip" "${{ env.APP_LABEL }}-${{ env.PACKAGE_VERSION }}${{ matrix.demo && '-demo-macos' || '' }}-intel.dmg"
 
       - name: Upload artifacts (demo)
         if: matrix.demo == true
@@ -287,7 +288,7 @@ jobs:
     environment: build
     strategy:
       matrix:
-        demo: [false, true]
+        demo: [false]
     env:
       QT_DIR: ${{ github.workspace }}\Qt
 
@@ -427,8 +428,9 @@ jobs:
     needs:
     - build-linux
     - build-mac
+    - build-mac-intel
     - build-windows
-    if: startsWith(github.ref, 'refs/tags/')
+    if: always() && (github.event_name == 'workflow_dispatch' || startsWith(github.ref, 'refs/tags/')) #if: startsWith(github.ref, 'refs/tags/')
     runs-on: ubuntu-latest
 
     steps:
@@ -444,10 +446,9 @@ jobs:
         uses: softprops/action-gh-release@v2
         with:
           files: |
-            artifacts/**/*-demo*
-            artifacts/**/*.AppImage
-          tag_name: "${{ github.ref_name }}"
-          name: "Release ${{ github.ref_name }}"
+            artifacts/**/*
+          tag_name: "${{ github.ref_name || format('manual-{0}', github.run_id) }}" #tag_name: "${{ github.ref_name }}"
+          name: "Release ${{ github.ref_name || github.run_id }}" #name: "Release ${{ github.ref_name }}"
           body: "Automated release for version ${{ github.ref_name }}"
-          draft: true
+          draft: false
           prerelease: true

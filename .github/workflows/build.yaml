@@ -446,9 +446,7 @@ jobs:
         uses: softprops/action-gh-release@v2
         with:
           files: |
-            artifacts/**/*.AppImage
-            artifacts/**/*.zip
-            artifacts/**/*.dmg
+            artifacts/**/*
           tag_name: "${{ github.ref_name || format('manual-{0}', github.run_id) }}" #tag_name: "${{ github.ref_name }}"
           name: "Release ${{ github.ref_name || github.run_id }}" #name: "Release ${{ github.ref_name }}"
           body: "Automated release for version ${{ github.ref_name }}"

@@ -222,7 +222,7 @@ jobs:
           if-no-files-found: error
 
   build-mac-intel:
-    runs-on: macos-13
+    runs-on: macos-12
     environment: build
     strategy:
       matrix:

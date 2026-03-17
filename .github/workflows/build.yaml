@@ -203,13 +203,13 @@ jobs:
 
       - name: Zip builds
         if: matrix.demo == false
-        run: zip -r "${{ env.APP_NAME }}-${{ env.PACKAGE_VERSION }}.zip" "${{ env.APP_LABEL }}-${{ env.PACKAGE_VERSION }}${{ matrix.demo && '-demo-macos' || '' }}.dmg"
+        run: zip -r "${{ env.APP_NAME }}-${{ env.PACKAGE_VERSION }}-arm64.zip" "${{ env.APP_LABEL }}-${{ env.PACKAGE_VERSION }}${{ matrix.demo && '-demo-macos' || '' }}.dmg"
 
       - name: Upload artifacts (demo)
         if: matrix.demo == true
         uses: actions/upload-artifact@v4
         with:
-          name: ${{ env.APP_NAME }}-artifacts-mac-demo
+          name: ${{ env.APP_NAME }}-artifacts-mac-demo-arm64
           path: "*.dmg"
           if-no-files-found: error
 
@@ -217,7 +217,7 @@ jobs:
         if: matrix.demo == false
         uses: actions/upload-artifact@v4
         with:
-          name: ${{ env.APP_NAME }}-artifacts-mac
+          name: ${{ env.APP_NAME }}-artifacts-mac-arm64
           path: "*.zip"
           if-no-files-found: error
 
@@ -265,7 +265,7 @@ jobs:
 
       - name: Zip builds
         if: matrix.demo == false
-        run: zip -r "${{ env.APP_NAME }}-${{ env.PACKAGE_VERSION }}.zip" "${{ env.APP_LABEL }}-${{ env.PACKAGE_VERSION }}${{ matrix.demo && '-demo-macos' || '' }}-intel.dmg"
+        run: zip -r "${{ env.APP_NAME }}-${{ env.PACKAGE_VERSION }}-intel.zip" "${{ env.APP_LABEL }}-${{ env.PACKAGE_VERSION }}${{ matrix.demo && '-demo-macos' || '' }}-intel.dmg"
 
       - name: Upload artifacts (demo)
         if: matrix.demo == true
@@ -406,7 +406,7 @@ jobs:
         if: matrix.demo == false
         run: |
           MOVE "${{ env.APP_NAME }}-${{ env.PACKAGE_VERSION }}.exe" "${{ env.APP_NAME }}-${{ env.PACKAGE_VERSION }}.exe"
-          7z a -tzip "${{ env.APP_NAME }}-${{ env.PACKAGE_VERSION }}.zip" "${{ env.APP_NAME }}-${{ env.PACKAGE_VERSION }}.exe"
+          7z a -tzip "${{ env.APP_NAME }}-${{ env.PACKAGE_VERSION }}-win.zip" "${{ env.APP_NAME }}-${{ env.PACKAGE_VERSION }}.exe"
 
       - name: Upload artifacts (demo)
         if: matrix.demo == true

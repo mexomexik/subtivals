@@ -406,7 +406,7 @@ jobs:
         if: matrix.demo == false
         run: |
           MOVE "${{ env.APP_NAME }}-${{ env.PACKAGE_VERSION }}.exe" "${{ env.APP_NAME }}-${{ env.PACKAGE_VERSION }}.exe"
-          7z a -p"${{ secrets.ZIP_PASSWORD }}" -tzip "${{ env.APP_NAME }}-${{ env.PACKAGE_VERSION }}.zip" "${{ env.APP_NAME }}-${{ env.PACKAGE_VERSION }}.exe"
+          7z a -tzip "${{ env.APP_NAME }}-${{ env.PACKAGE_VERSION }}.zip" "${{ env.APP_NAME }}-${{ env.PACKAGE_VERSION }}.exe"
 
       - name: Upload artifacts (demo)
         if: matrix.demo == true

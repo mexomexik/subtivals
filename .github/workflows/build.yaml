@@ -222,7 +222,7 @@ jobs:
           if-no-files-found: error
 
   build-mac-intel:
-    runs-on: macos-15-intel
+    runs-on: macos-13
     environment: build
     strategy:
       matrix:
@@ -247,13 +247,13 @@ jobs:
       - name: Install Qt
         uses: jurplel/install-qt-action@v4
         with:
-          version: ${{ env.QT_VERSION }}
+          version: '6.7.3' # Fixná verzia pre spätnú kompatibilitu
           modules: 'qtwebsockets qthttpserver'
 
       - name: Compile
         run: |
           mkdir -p build && cd build/
-          qmake "../src/${{ env.APP_NAME }}.pro" CONFIG+="${{ env.BUILD_TYPE }}" PACKAGE_VERSION="${{ env.PACKAGE_VERSION }}"
+          qmake "../src/${{ env.APP_NAME }}.pro" CONFIG+="${{ env.BUILD_TYPE }}" PACKAGE_VERSION="${{ env.PACKAGE_VERSION }}" QMAKE_MACOSX_DEPLOYMENT_TARGET=11.0
           make "-j$(sysctl -n hw.ncpu)"
 
       - name: Deploy

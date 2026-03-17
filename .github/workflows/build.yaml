@@ -313,7 +313,7 @@ jobs:
           git apply demo.patch
 
       - name: Get installer source
-        run: git checkout origin/win-installer -- ./win-installer.nsi
+        run: git fetch origin win-installer && git checkout origin/win-installer -- ./win-installer.nsi #run: git checkout origin/win-installer -- ./win-installer.nsi
 
       - name: Install Qt (MinGW)
         uses: jurplel/install-qt-action@v4
@@ -405,7 +405,7 @@ jobs:
       - name: Zip builds
         if: matrix.demo == false
         run: |
-          MOVE "${{ env.APP_NAME }}-${{ env.PACKAGE_VERSION }}.exe" "${{ env.APP_NAME }}-${{ env.PACKAGE_VERSION }}.exe"
+          # MOVE "${{ env.APP_NAME }}-${{ env.PACKAGE_VERSION }}.exe" "${{ env.APP_NAME }}-${{ env.PACKAGE_VERSION }}.exe"
           7z a -tzip "${{ env.APP_NAME }}-${{ env.PACKAGE_VERSION }}-win.zip" "${{ env.APP_NAME }}-${{ env.PACKAGE_VERSION }}.exe"
 
       - name: Upload artifacts (demo)
@@ -446,7 +446,9 @@ jobs:
         uses: softprops/action-gh-release@v2
         with:
           files: |
-            artifacts/**/*
+            artifacts/**/*.AppImage
+            artifacts/**/*.zip
+            artifacts/**/*.dmg
           tag_name: "${{ github.ref_name || format('manual-{0}', github.run_id) }}" #tag_name: "${{ github.ref_name }}"
           name: "Release ${{ github.ref_name || github.run_id }}" #name: "Release ${{ github.ref_name }}"
           body: "Automated release for version ${{ github.ref_name }}"

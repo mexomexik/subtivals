@@ -37,14 +37,14 @@ signals:
 public slots:
   void toggleHideDesktop(bool state);
   void screenResizable(bool state);
-  void changeGeometry(int, const QRect &);
+  void changeGeometry(int, const QRect &) override;
 
 protected:
-  void mouseMoveEvent(QMouseEvent *e);
-  void mousePressEvent(QMouseEvent *e);
-  void mouseReleaseEvent(QMouseEvent *e);
-  void wheelEvent(QWheelEvent *e);
-  QRect subtitlesBounds();
+  void mouseMoveEvent(QMouseEvent *e) override;
+  void mousePressEvent(QMouseEvent *e) override;
+  void mouseReleaseEvent(QMouseEvent *e) override;
+  void wheelEvent(QWheelEvent *e) override;
+  QRect subtitlesBounds() override;
 
 private:
   void applyGeometry(const QRect &);
@@ -54,6 +54,7 @@ private:
   QRect m_screenGeom;
   QRect m_subtitlesGeomBottomScreenRelative;
   bool m_hideDesktop;
+  bool m_hideDesktopRequested;
   int m_monitor;
   bool m_resizable;
 

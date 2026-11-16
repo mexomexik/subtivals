@@ -15,6 +15,7 @@
  *  along with Subtivals.  If not, see <http://www.gnu.org/licenses/>
  **/
 #include <QColorDialog>
+#include <QGuiApplication>
 #include <QKeyEvent>
 #include <QMouseEvent>
 #include <QPainter>
@@ -28,24 +29,38 @@
 #include "script.h"
 #include "styleeditor.h"
 
+// Index of the screen with this name, or -1 if not connected.
+static int screenIndex(const QString &name) {
+  if (name.isEmpty())
+    return -1;
+  const QList<QScreen *> screens = QGuiApplication::screens();
+  for (int i = 0; i < screens.size(); i++) {
+    if (screens.at(i)->name() == name)
+      return i;
+  }
+  return -1;
+}
+
 ConfigEditor::ConfigEditor(QWidget *parent)
     : QWidget(parent), ui(new Ui::ConfigEditor),
       m_styleEditor(new StyleEditor(this)), m_preset(-1),
       m_parentWidget(parent) {
   ui->setupUi(this);
   ui->tabStyles->setLayout(m_styleEditor->layout());
-  connect(m_styleEditor, SIGNAL(styleChanged()), this, SIGNAL(styleChanged()));
-  connect(m_styleEditor, SIGNAL(styleOverriden(bool)), this,
-          SIGNAL(styleOverriden(bool)));
-  connect(m_styleEditor, SIGNAL(styleChanged()), this, SLOT(enableButtonBox()));
+  connect(m_styleEditor, &StyleEditor::styleChanged, this,
+          &ConfigEditor::styleChanged);
+  connect(m_styleEditor, &StyleEditor::styleOverriden, this,
+          &ConfigEditor::styleOverriden);
+  connect(m_styleEditor, &StyleEditor::styleChanged, this,
+          [this]() { enableButtonBox(); });
 
   adjustSize();
   setMaximumSize(size());
 
-  connect(qApp, SIGNAL(screenAdded(QScreen *)), this,
-          SLOT(refreshScreensList()));
-  connect(qApp, SIGNAL(screenRemoved(QScreen *)), this,
-          SLOT(refreshScreensList()));
+  connect(qApp, &QGuiApplication::screenAdded, this,
+          [this](QScreen *) { refreshScreensList(); });
+  connect(qApp, &QGuiApplication::screenRemoved, this,
+          [this](QScreen *) { refreshScreensList(); });
   refreshScreensList();
 
   // Load known presets.
@@ -72,14 +87,41 @@ ConfigEditor::~ConfigEditor() {
 }
 
 void ConfigEditor::refreshScreensList() {
+  const QString previous = ui->screens->currentData().toString();
   QList<QScreen *> screens = QGuiApplication::screens();
+  // Rebuilding the list must not trigger apply().
+  ui->screens->blockSignals(true);
   ui->screens->clear();
   for (int i = 0; i < screens.size(); i++) {
     QString screenName =
         screens.at(i)->name().replace("\\", "").replace(".", " ").replace("  ",
                                                                           " ");
-    ui->screens->addItem(QString(tr("Monitor %1")).arg(screenName));
+    ui->screens->addItem(QString(tr("Monitor %1")).arg(screenName),
+                         screens.at(i)->name());
   }
+  ui->screens->blockSignals(false);
+
+  if (m_preset < 0 || screens.isEmpty()) // Still constructing
+    return;
+
+  // Prefer the preset's screen (it may just have been plugged in),
+  // otherwise stay on the current one.
+  QSettings settings;
+  settings.beginGroup(QString("ScreenGeometry-%1").arg(m_preset));
+  int screen = screenIndex(settings.value("screen-name").toString());
+  if (screen < 0)
+    screen = screenIndex(previous);
+  if (screen < 0)
+    screen = settings.value("screen", screens.size() > 1 ? 1 : 0).toInt();
+  screen = qBound(0, screen, int(screens.size()) - 1);
+  settings.endGroup();
+
+  ui->screens->blockSignals(true);
+  ui->screens->setCurrentIndex(screen);
+  ui->screens->blockSignals(false);
+  QRect r(ui->x->text().toInt(), ui->y->text().toInt(), ui->w->text().toInt(),
+          ui->h->text().toInt());
+  emit changeScreen(screen, r);
 }
 
 void ConfigEditor::setScript(Script *script) {
@@ -207,11 +249,18 @@ void ConfigEditor::restore() {
 void ConfigEditor::reset() {
   QList<QScreen *> screens = QGuiApplication::screens();
   int nbScreens = screens.size();
+  if (nbScreens == 0)
+    return;
   int defaultScreen = nbScreens > 1 ? 1 : 0;
   // Reload from settings
   QSettings settings;
   settings.beginGroup(QString("ScreenGeometry-%1").arg(m_preset));
-  int presetScreen = settings.value("screen", defaultScreen).toInt();
+  // Look up screen by name first, since indexes are not stable across
+  // sessions. Fallback to index (presets saved by older versions).
+  int presetScreen = screenIndex(settings.value("screen-name").toString());
+  if (presetScreen < 0) {
+    presetScreen = settings.value("screen", defaultScreen).toInt();
+  }
   int screen = qBound(0, presetScreen, nbScreens - 1);
   QRect screenGeom = screens.at(screen)->geometry();
   int x = settings.value("x", 0).toInt();
@@ -248,7 +297,12 @@ void ConfigEditor::save() {
   QSettings settings;
   settings.beginGroup(QString("ScreenGeometry-%1").arg(m_preset));
   settings.setValue("name", ui->presets->itemText(m_preset));
-  settings.setValue("screen", qMax(0, ui->screens->currentIndex()));
+  int screen = qMax(0, ui->screens->currentIndex());
+  settings.setValue("screen", screen);
+  const QList<QScreen *> screens = QGuiApplication::screens();
+  if (screen < screens.size()) {
+    settings.setValue("screen-name", screens.at(screen)->name());
+  }
   settings.setValue("x", ui->x->text());
   settings.setValue("y", ui->y->text());
   settings.setValue("w", ui->w->text());

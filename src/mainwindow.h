@@ -17,6 +17,7 @@
 #ifndef MAINWINDOW_H
 #define MAINWINDOW_H
 
+#include <QActionGroup>
 #include <QFileSystemWatcher>
 #include <QLabel>
 #include <QList>
@@ -32,13 +33,13 @@
 #include "script.h"
 #include "subtitlesform.h"
 
-#define COLUMN_START 0
-#define COLUMN_END 1
-#define COLUMN_STYLE 2
-#define COLUMN_TEXT 3
-#define COLUMN_COMMENTS 4
+static constexpr int COLUMN_START = 0;
+static constexpr int COLUMN_END = 1;
+static constexpr int COLUMN_STYLE = 2;
+static constexpr int COLUMN_TEXT = 3;
+static constexpr int COLUMN_COMMENTS = 4;
 
-#define MAX_RECENT_FILES 7
+static constexpr int MAX_RECENT_FILES = 7;
 
 typedef QPair<double, double> Factor;
 static QList<Factor> FACTORS_VALUES = {
@@ -49,6 +50,7 @@ class ConfigEditor;
 class ShortcutEditor;
 class Player;
 class RemoteOptionsDialog;
+class Recorder;
 
 namespace Ui {
   class MainWindow;
@@ -64,11 +66,12 @@ public:
   void openFile(const QString &p_fileName);
   void closeFile();
   ConfigEditor *configEditor();
-  const Player *player();
-  const RemoteOptionsDialog *remoteOptionsDialog();
+  Player *player();
+  RemoteOptionsDialog *remoteOptionsDialog();
   void connectProjectionEvents(SubtitlesForm *f);
 signals:
   void hideDesktop(bool state);
+  void projectionVisible(bool state);
   void toggleHide(bool state);
   void screenResizable(bool state);
   // For remote control
@@ -87,6 +90,7 @@ public slots:
   void actionPause();
   void actionNext();
   void actionPrevious();
+  void delayStepSelected();
   void actionToggleHide(bool state = true);
   void actionAbout();
   void actionShowHelp();
@@ -118,7 +122,10 @@ public slots:
   void enableKnownFactors(bool);
   void actionToggleLargeText(bool);
   void actionToggleLockScreenOnPlay(bool);
+  void refreshScreenActions();
+  void actionToggleProjectionSingleScreen(bool);
   void actionShowRemoteOptions();
+  void actionRecord(bool);
 
 protected:
   bool canNext();
@@ -135,6 +142,7 @@ protected:
   void setState(State p_state);
   void updateRecentFileActions();
   void emitStateInfo();
+  void setDelayStep(int milliseconds);
 
 private:
   State m_state;
@@ -153,6 +161,7 @@ private:
   QString m_lastFolder;
   ConfigEditor *m_preferences;
   SubtitlesForm *m_previewpanel;
+  QWidget *m_projection = nullptr;
   ShortcutEditor *m_shortcutEditor;
   RemoteOptionsDialog *m_remoteOptionsDialog;
   QMap<Subtitle *, int> m_tableMapping;
@@ -167,6 +176,7 @@ private:
   QLabel *m_countDown;
   QList<Subtitle *> m_currentSubtitles;
   QList<QAction *> m_recentFileActions;
+  QActionGroup *m_delayStepGroup;
   int m_warnCharsRate;
   int m_errorCharsRate;
   int m_charsRate;
@@ -174,6 +184,8 @@ private:
   int m_subtitleMinDuration;
   int m_largeTextPercent;
   bool m_windowShown;
+  Recorder *m_recorder;
+  QTimer m_recordingStatusTimer;
 };
 
 #endif // MAINWINDOW_H

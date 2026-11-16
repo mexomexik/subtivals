@@ -19,9 +19,14 @@
 #include <QtCore/QUrl>
 #include <QtCore/QtGlobal>
 
+#include <QAbstractSlider>
+#include <QCheckBox>
+#include <QDateTime>
 #include <QDesktopServices>
+#include <QDoubleSpinBox>
 #include <QFile>
 #include <QFileDialog>
+#include <QFileInfo>
 #include <QFileSystemWatcher>
 #include <QKeyEvent>
 #include <QMessageBox>
@@ -32,7 +37,6 @@
 #include <QStyle>
 #include <QStyledItemDelegate>
 #include <QStringDecoder>
-#include <QThread>
 #include <QWidget>
 #include <QStyleHints>
 #include <QStyleFactory>
@@ -41,8 +45,10 @@
 #include "configeditor.h"
 #include "mainwindow.h"
 #include "player.h"
+#include "projectionwindow.h"
 #include "shortcuteditor.h"
 #include "remoteoptionsdialog.h"
+#include "recorder.h"
 #include "ui_mainwindow.h"
 #include "wizard.h"
 
@@ -100,7 +106,7 @@ class SubtitleTextDelegate : public QStyledItemDelegate {
       QString html = value.toString();
       // Show current subtitle with bold font.
       if (index.data(Qt::UserRole).toBool()) {
-        html = QString("<b>%2</b>").arg(html);
+        html = QString("<b>%1</b>").arg(html);
       }
       document.setHtml(QString("<span style='color:%1;'>%2</span>")
                            .arg(textColor.name(), html));
@@ -167,6 +173,25 @@ class SubtitleDurationDelegate : public QStyledItemDelegate {
   }
 };
 
+static QString delayStepLabel(int milliseconds) {
+  switch (milliseconds) {
+  case 40:
+    return MainWindow::tr("1/25 sec");
+  case 42:
+    return MainWindow::tr("1/24 sec");
+  case 100:
+    return MainWindow::tr("1/10 sec");
+  case 250:
+    return MainWindow::tr("1/4 sec");
+  case 500:
+    return MainWindow::tr("1/2 sec");
+  case 1000:
+    return MainWindow::tr("1 sec");
+  default:
+    return QString::number(milliseconds) + MainWindow::tr(" msec");
+  }
+}
+
 MainWindow::MainWindow(QWidget *parent)
     : QMainWindow(parent), ui(new Ui::MainWindow), m_script(nullptr),
       m_player(new Player()), m_playerThread(new QThread()),
@@ -177,9 +202,14 @@ MainWindow::MainWindow(QWidget *parent)
       m_selectSubtitle(true), m_rowChanged(false), m_reloadEnabled(false),
       m_filewatcher(new QFileSystemWatcher),
       m_scriptProperties(new QLabel(this)), m_countDown(new QLabel(this)),
-      m_windowShown(false) {
+      m_windowShown(false), m_recorder(new Recorder(this)) {
   ui->setupUi(this);
   setWindowTitle(APP_NAME);
+  if (!HELP_ENABLED) {
+    ui->actionShowHelp->setVisible(false);
+    ui->actionShowHelp->setEnabled(false);
+  }
+  ui->menuAide->menuAction()->setVisible(HELP_ENABLED || WIZARD_ENABLED);
   m_defaultPalette = qApp->palette();
 
   // Precompute contrasting text colors
@@ -206,30 +236,37 @@ MainWindow::MainWindow(QWidget *parent)
   ui->speedFactor->installEventFilter(this);
   m_previewpanel->installEventFilter(this);
   m_preferences->installEventFilter(this);
-  connect(ui->tableWidget->verticalScrollBar(), SIGNAL(valueChanged(int)), this,
-          SLOT(disableSubtitleSelection()));
+  connect(ui->tableWidget->verticalScrollBar(), &QAbstractSlider::valueChanged,
+          this, [this](int) { disableSubtitleSelection(); });
 
   m_player->moveToThread(m_playerThread);
   m_playerThread->start();
   qRegisterMetaType<QList<Subtitle *>>("QList<Subtitle*>");
-  connect(m_player, SIGNAL(pulse(quint64)), this, SLOT(playPulse(quint64)));
-  connect(m_player, SIGNAL(changed(QList<Subtitle *>)), this,
-          SLOT(subtitleChanged(QList<Subtitle *>)));
-  connect(m_player, SIGNAL(changed(QList<Subtitle *>)), this,
-          SLOT(disableActionNext()));
-  connect(m_player, SIGNAL(autoHide()), this, SLOT(actionToggleHide()));
+  connect(m_player, &Player::pulse, this, &MainWindow::playPulse);
+  connect(m_player, &Player::changed, this, &MainWindow::subtitleChanged);
+  connect(m_player, &Player::changed, m_recorder, &Recorder::recordSubtitles);
+  connect(m_player, &Player::changed, this, &MainWindow::disableActionNext);
+  connect(m_player, &Player::autoHide, this, [this]() { actionToggleHide(); });
+  connect(ui->actionRecord, &QAction::toggled, this, &MainWindow::actionRecord);
 
-  connect(ui->actionHideDesktop, SIGNAL(toggled(bool)), this,
-          SIGNAL(hideDesktop(bool)));
-  connect(ui->actionAddDelay, SIGNAL(triggered()), m_player, SLOT(addDelay()));
-  connect(ui->actionSubDelay, SIGNAL(triggered()), m_player, SLOT(subDelay()));
-  connect(ui->enableSpeedFactor, SIGNAL(toggled(bool)), m_player,
-          SLOT(enableSpeedFactor(bool)));
-  connect(ui->speedFactor, SIGNAL(valueChanged(double)), m_player,
-          SLOT(setSpeedFactor(double)));
+  connect(ui->actionHideDesktop, &QAction::toggled, this,
+          &MainWindow::hideDesktop);
+  // Not `toggled`, to react only when the user changes it.
+  connect(ui->actionShowProjectionSingleScreen, &QAction::triggered, this,
+          &MainWindow::actionToggleProjectionSingleScreen);
+  connect(ui->actionAddDelay, &QAction::triggered, m_player,
+          [player = m_player](bool) { player->addDelay(); });
+  connect(ui->actionSubDelay, &QAction::triggered, m_player, &Player::subDelay);
+  connect(ui->enableSpeedFactor, &QCheckBox::toggled, m_player,
+          &Player::enableSpeedFactor);
+  connect(ui->speedFactor, &QDoubleSpinBox::valueChanged, m_player,
+          &Player::setSpeedFactor);
 
-  // Prevent hiding desktop if only one screen!
-  ui->actionHideDesktop->setEnabled(QGuiApplication::screens().size() > 1);
+  connect(qApp, &QGuiApplication::screenAdded, this,
+          &MainWindow::refreshScreenActions);
+  connect(qApp, &QGuiApplication::screenRemoved, this,
+          &MainWindow::refreshScreenActions);
+  refreshScreenActions();
 
   setState(NODATA);
   ui->tableWidget->setFocus();
@@ -244,7 +281,7 @@ MainWindow::MainWindow(QWidget *parent)
 
   // Build the list of known factors.
   ui->knownFactors->addItem("", 100.0);
-  foreach (Factor conv, FACTORS_VALUES) {
+  for (const Factor &conv : FACTORS_VALUES) {
     ui->knownFactors->addItem(
         QString("%1 fps → %2 fps").arg(conv.first).arg(conv.second),
         conv.first * 100.0 / conv.second);
@@ -268,25 +305,38 @@ MainWindow::MainWindow(QWidget *parent)
   ui->mainLayout->addWidget(m_preferences);
   ui->statusBar->addPermanentWidget(m_countDown);
   ui->statusBar->addPermanentWidget(m_scriptProperties);
-  connect(m_preferences, SIGNAL(styleOverriden(bool)), this,
-          SLOT(showStyleOverriden(bool)));
+  ui->statusBar->addWidget(ui->recordingStatus);
+  m_recordingStatusTimer.setInterval(50);
+  connect(&m_recordingStatusTimer, &QTimer::timeout, this, [this]() {
+    const qint64 seconds = m_recorder->elapsed() / 1000;
+    const QString time =
+        QString("%1:%2:%3.%4")
+            .arg(seconds / 3600, 2, 10, QChar('0'))
+            .arg((seconds / 60) % 60, 2, 10, QChar('0'))
+            .arg(seconds % 60, 2, 10, QChar('0'))
+            .arg(m_recorder->elapsed() % 1000, 3, 10, QChar('0'));
+    ui->recordingStatus->setText(tr("Recording: %1").arg(time));
+  });
+  connect(m_preferences, &ConfigEditor::styleOverriden, this,
+          &MainWindow::showStyleOverriden);
 
   // Selection timer (disables subtitle highlighting for a while)
   m_timerSelection.setSingleShot(true);
   m_timerSelection.setInterval(1000);
-  connect(&m_timerSelection, SIGNAL(timeout()), this,
-          SLOT(enableSubtitleSelection()));
+  connect(&m_timerSelection, &QTimer::timeout, this,
+          &MainWindow::enableSubtitleSelection);
 
   // Action Next timer (disables next action for a while)
   m_timerNext.setSingleShot(true);
   m_timerNext.setInterval(300);
-  connect(&m_timerNext, SIGNAL(timeout()), this, SLOT(enableActionNext()));
+  connect(&m_timerNext, &QTimer::timeout, this, &MainWindow::enableActionNext);
 
   // Script file watching :
-  connect(m_filewatcher, SIGNAL(fileChanged(QString)), this,
-          SLOT(fileChanged(QString)));
+  connect(m_filewatcher, &QFileSystemWatcher::fileChanged, this,
+          &MainWindow::fileChanged);
   m_timerFileChange.setSingleShot(true);
-  connect(&m_timerFileChange, SIGNAL(timeout()), this, SLOT(reloadScript()));
+  connect(&m_timerFileChange, &QTimer::timeout, this,
+          &MainWindow::reloadScript);
 
   // Emit state info 3 times per second
   QTimer *stateInfoTimer = new QTimer(this);
@@ -298,12 +348,42 @@ MainWindow::MainWindow(QWidget *parent)
   for (int i = 0; i < MAX_RECENT_FILES; ++i) {
     QAction *action = new QAction(this);
     action->setVisible(false);
-    connect(action, SIGNAL(triggered()), this, SLOT(openRecentFile()));
+    connect(action, &QAction::triggered, this, &MainWindow::openRecentFile);
     m_recentFileActions.insert(i, action);
     ui->menuFile->insertAction(ui->actionExit, action);
   }
   ui->menuFile->insertSeparator(ui->actionExit);
   updateRecentFileActions();
+
+  // Connect the delay step actions declared in the UI.
+  m_delayStepGroup = new QActionGroup(ui->menuDelayStep);
+  for (QAction *action : ui->menuDelayStep->actions())
+    m_delayStepGroup->addAction(action);
+
+  // Connect the language menu declared in the UI.
+  QSettings settings;
+  QString currentLocale = settings.value("Language/locale").toString();
+  QActionGroup *languageGroup = new QActionGroup(ui->menuLanguage);
+  const QList<QAction *> languageActions = {
+      ui->actionLanguageEnglish, ui->actionLanguageCatalan,
+      ui->actionLanguageSpanish, ui->actionLanguageFrench,
+      ui->actionLanguageItalian};
+  for (QAction *action : languageActions) {
+    languageGroup->addAction(action);
+    action->setChecked(action->data().toString() == currentLocale);
+  }
+  // Locales without a saved preference fall back to English.
+  if (!languageGroup->checkedAction()) {
+    ui->actionLanguageEnglish->setChecked(true);
+  }
+  connect(languageGroup, &QActionGroup::triggered, this,
+          [this](QAction *action) {
+            QSettings settings;
+            settings.setValue("Language/locale", action->data().toString());
+            QMessageBox::information(
+                this, tr("Language"),
+                tr("The language will change when Subtivals restarts."));
+          });
 
   // Initialize shortcuts
   m_shortcutEditor->registerAction(ui->actionPlay);
@@ -321,7 +401,9 @@ MainWindow::MainWindow(QWidget *parent)
   m_shortcutEditor->registerAction(ui->actionPreferences);
   m_shortcutEditor->registerAction(ui->actionShowPreview);
   m_shortcutEditor->registerAction(ui->actionEnableReload);
-  m_shortcutEditor->registerAction(ui->actionShowHelp);
+  if (HELP_ENABLED) {
+    m_shortcutEditor->registerAction(ui->actionShowHelp);
+  }
   m_shortcutEditor->registerAction(ui->actionDarkMode);
   m_shortcutEditor->registerAction(ui->actionExit);
 }
@@ -330,15 +412,10 @@ MainWindow::~MainWindow() {
   m_playerThread->quit();
   m_playerThread->wait();
   delete ui;
-  if (m_script)
-    delete m_script;
+  delete m_script;
   delete m_player;
   delete m_playerThread;
-  delete m_preferences;
-  delete m_previewpanel;
   delete m_filewatcher;
-  delete m_scriptProperties;
-  delete m_countDown;
 }
 
 void MainWindow::dragEnterEvent(QDragEnterEvent *event) {
@@ -393,6 +470,8 @@ void MainWindow::closeEvent(QCloseEvent *) {
   settings.setValue("showLargeText", ui->actionLargeText->isChecked());
   settings.setValue("lockScreenOnPlay",
                     ui->actionLockScreenOnPlay->isChecked());
+  settings.setValue("showProjectionSingleScreen",
+                    ui->actionShowProjectionSingleScreen->isChecked());
   settings.endGroup();
 
   settings.beginGroup("AdvancedOptions");
@@ -401,6 +480,7 @@ void MainWindow::closeEvent(QCloseEvent *) {
   settings.setValue("charsRate", m_charsRate);
   settings.setValue("subtitleInterval", m_subtitleInterval);
   settings.setValue("subtitleMinDuration", m_subtitleMinDuration);
+  settings.setValue("delayMilliseconds", m_player->delayStep());
   settings.endGroup();
 
   settings.beginGroup("PreviewPanel");
@@ -446,7 +526,13 @@ void MainWindow::showEvent(QShowEvent *) {
   ui->actionAutoHideEnded->setChecked(autoHide);
   ui->actionPreferences->setChecked(
       settings.value("showPreferences", true).toBool());
-  bool showPreview = settings.value("showPreview", false).toBool();
+  // Default is set in main() for existing users (#392).
+  ui->actionShowProjectionSingleScreen->setChecked(
+      settings.value("showProjectionSingleScreen", false).toBool());
+  // Without projection window, show preview by default.
+  bool projectionHidden = QGuiApplication::screens().size() < 2 &&
+                          !ui->actionShowProjectionSingleScreen->isChecked();
+  bool showPreview = settings.value("showPreview", projectionHidden).toBool();
   ui->actionShowPreview->setChecked(showPreview);
   ui->actionDurationCorrection->setChecked(
       settings.value("durationCorrection", false).toBool());
@@ -459,6 +545,7 @@ void MainWindow::showEvent(QShowEvent *) {
       settings.value("showLargeText", false).toBool());
   ui->actionLockScreenOnPlay->setChecked(
       settings.value("lockScreenOnPlay", false).toBool());
+  refreshScreenActions();
 
   if (WIZARD_ENABLED) {
     if (settings.value("wizard", true).toBool()) {
@@ -490,43 +577,37 @@ void MainWindow::showEvent(QShowEvent *) {
   m_previewpanel->opacity(settings.value("opacity", 0.7).toDouble());
   settings.endGroup();
 
-  // Reflect the configured add/sub delay on the action text.
-  m_player->setDelayStep(delayStepMilliseconds);
-  QString text;
-  switch (delayStepMilliseconds) {
-  case 40:
-    text = tr("1/25 sec");
-    break;
-  case 42:
-    text = tr("1/24 sec");
-    break;
-  case 100:
-    text = tr("1/10 sec");
-    break;
-  case 250:
-    text = tr("1/4 sec");
-    break;
-  case 500:
-    text = tr("1/2 sec");
-    break;
-  case 1000:
-    text = tr("1 sec");
-    break;
-  default:
-    text = QString::number(delayStepMilliseconds) + tr(" msec");
-    break;
-  }
-  ui->actionAddDelay->setText("+" + text);
-  ui->actionSubDelay->setText("-" + text);
+  setDelayStep(delayStepMilliseconds);
 
   m_windowShown = true;
 }
 
+void MainWindow::setDelayStep(int milliseconds) {
+  m_player->setDelayStep(milliseconds);
+  // Reflect the configured add/sub delay on the action text.
+  QString text = delayStepLabel(milliseconds);
+  ui->actionAddDelay->setText("+" + text);
+  ui->actionAddDelay->setToolTip("+" + text);
+  ui->actionSubDelay->setText("-" + text);
+  ui->actionSubDelay->setToolTip("-" + text);
+  // Values set manually in the settings file may not be among the choices.
+  for (QAction *action : m_delayStepGroup->actions()) {
+    action->setChecked(action->data().toInt() == milliseconds);
+  }
+  emitStateInfo();
+}
+
+void MainWindow::delayStepSelected() {
+  QAction *action = qobject_cast<QAction *>(sender());
+  if (action)
+    setDelayStep(action->data().toInt());
+}
+
 ConfigEditor *MainWindow::configEditor() { return m_preferences; }
 
-const Player *MainWindow::player() { return m_player; }
+Player *MainWindow::player() { return m_player; }
 
-const RemoteOptionsDialog *MainWindow::remoteOptionsDialog() {
+RemoteOptionsDialog *MainWindow::remoteOptionsDialog() {
   return m_remoteOptionsDialog;
 }
 
@@ -651,10 +732,8 @@ void MainWindow::openFile(const QString &p_fileName) {
 
   // Update the table
   ui->tableWidget->setRowCount(count);
-  QListIterator<Subtitle *> i = m_script->subtitles();
   int row = 0;
-  while (i.hasNext()) {
-    Subtitle *subtitle = i.next();
+  for (Subtitle *subtitle : m_script->subtitles()) {
     m_tableMapping[subtitle] = row;
     QTableWidgetItem *startItem = new QTableWidgetItem("");
     ui->tableWidget->setItem(row, COLUMN_START, startItem);
@@ -758,7 +837,7 @@ void MainWindow::refreshDurations() {
     format.append(".zzz");
   }
   int row = 0;
-  foreach (Subtitle *subtitle, m_script->subtitles()) {
+  for (Subtitle *subtitle : m_script->subtitles()) {
     QTableWidgetItem *startItem = ui->tableWidget->item(row, COLUMN_START);
     QTableWidgetItem *endItem = ui->tableWidget->item(row, COLUMN_END);
     QTime start = QTime(0, 0, 0).addMSecs(int(subtitle->msseStart()));
@@ -912,7 +991,7 @@ bool MainWindow::eventFilter(QObject *object, QEvent *event) {
       allActions.removeAll(ui->actionNext);
       allActions.removeAll(ui->actionSpeedUp);
       allActions.removeAll(ui->actionSlowDown);
-      foreach (QAction *action, allActions) {
+      for (QAction *action : std::as_const(allActions)) {
         if (!action->shortcut().isEmpty() &&
             action->shortcut().matches(keySequence) && action->isEnabled()) {
           // Trigger action manually
@@ -975,29 +1054,26 @@ void MainWindow::actionConfig(bool state) {
 }
 
 void MainWindow::connectProjectionEvents(SubtitlesForm *f) {
-  if (f != m_previewpanel) {
-    QObject::connect(f, SIGNAL(geometryChanged(int, QRect)), m_preferences,
-                     SLOT(projectionWindowChanged(int, QRect)));
-    QObject::connect(f, SIGNAL(geometryChanged(int, QRect)), m_previewpanel,
-                     SLOT(changeGeometry(int, QRect)));
+  if (ProjectionWindow *pw = qobject_cast<ProjectionWindow *>(f)) {
+    m_projection = pw;
+    connect(pw, &ProjectionWindow::geometryChanged, m_preferences,
+            &ConfigEditor::projectionWindowChanged);
+    connect(pw, &ProjectionWindow::geometryChanged, m_previewpanel,
+            &SubtitlesForm::changeGeometry);
   }
-  QObject::connect(m_player, SIGNAL(on(Subtitle *)), f,
-                   SLOT(addSubtitle(Subtitle *)));
-  QObject::connect(m_player, SIGNAL(off(Subtitle *)), f,
-                   SLOT(remSubtitle(Subtitle *)));
-  QObject::connect(m_player, SIGNAL(stopped()), f, SLOT(clearSubtitles()),
-                   Qt::DirectConnection);
-  QObject::connect(this, SIGNAL(toggleHide(bool)), f, SLOT(toggleHide(bool)));
+  connect(m_player, &Player::on, f, &SubtitlesForm::addSubtitle);
+  connect(m_player, &Player::off, f, &SubtitlesForm::remSubtitle);
+  connect(m_player, &Player::stopped, f, &SubtitlesForm::clearSubtitles,
+          Qt::DirectConnection);
+  connect(this, &MainWindow::toggleHide, f, &SubtitlesForm::toggleHide);
 
-  QObject::connect(m_preferences, SIGNAL(changeScreen(int, QRect)), f,
-                   SLOT(changeGeometry(int, QRect)));
-  QObject::connect(m_preferences, SIGNAL(color(QColor)), f,
-                   SLOT(color(QColor)));
-  QObject::connect(m_preferences, SIGNAL(outline(QColor, int)), f,
-                   SLOT(outline(QColor, int)));
-  QObject::connect(m_preferences, SIGNAL(styleChanged()), f, SLOT(repaint()));
-  QObject::connect(m_preferences, SIGNAL(rotate(double)), f,
-                   SLOT(rotate(double)));
+  connect(m_preferences, &ConfigEditor::changeScreen, f,
+          &SubtitlesForm::changeGeometry);
+  connect(m_preferences, &ConfigEditor::color, f, &SubtitlesForm::color);
+  connect(m_preferences, &ConfigEditor::outline, f, &SubtitlesForm::outline);
+  connect(m_preferences, &ConfigEditor::styleChanged, f,
+          [f]() { f->repaint(); });
+  connect(m_preferences, &ConfigEditor::rotate, f, &SubtitlesForm::rotate);
 }
 
 void MainWindow::actionShowPreview(bool state) {
@@ -1035,7 +1111,7 @@ void MainWindow::actionNext() {
               : 0;
   }
   bool isRowDisplayed = false;
-  foreach (Subtitle *e, m_currentSubtitles)
+  for (Subtitle *e : std::as_const(m_currentSubtitles))
     if (m_tableMapping[e] == row)
       isRowDisplayed = true;
 
@@ -1091,6 +1167,36 @@ void MainWindow::actionToggleLockScreenOnPlay(bool state) {
   }
 }
 
+void MainWindow::refreshScreenActions() {
+  bool singleScreen = QGuiApplication::screens().size() < 2;
+  // Prevent hiding desktop if only one screen!
+  ui->actionHideDesktop->setEnabled(!singleScreen);
+  // Projection window would cover the main window on single screen.
+  ui->actionShowProjectionSingleScreen->setEnabled(singleScreen);
+  emit projectionVisible(!singleScreen ||
+                         ui->actionShowProjectionSingleScreen->isChecked());
+  // Lock on play depends on the number of screens too.
+  actionToggleLockScreenOnPlay(ui->actionLockScreenOnPlay->isChecked());
+}
+
+void MainWindow::actionToggleProjectionSingleScreen(bool state) {
+  refreshScreenActions();
+  if (!state || !m_projection || !m_projection->isVisible())
+    return;
+  // Put the projection window at the top so the main window can sit below it.
+  const QRect avail = screen()->availableGeometry();
+  QRect proj = m_projection->geometry();
+  proj.moveTop(avail.top());
+  m_projection->move(proj.topLeft());
+
+  // Move (and shrink) the main window below the projection window.
+  const QRect frame = frameGeometry();
+  const int below = avail.bottom() - proj.bottom();
+  const int frameHeight = qMin(frame.height(), qMax(0, below));
+  resize(width(), frameHeight - (frame.height() - height()));
+  move(frame.x(), proj.bottom() + 1);
+}
+
 void MainWindow::disableSubtitleSelection() {
   // Disable selection of subtitles for some time
   // in order to let the user perform a double-clic
@@ -1112,7 +1218,7 @@ void MainWindow::actionSubtitleClic(QModelIndex index) {
   disableSubtitleSelection();
   // Keep track of row selection change
   QList<int> currentRows;
-  foreach (Subtitle *e, m_currentSubtitles) {
+  for (Subtitle *e : std::as_const(m_currentSubtitles)) {
     currentRows.append(m_tableMapping[e]);
   }
   if (!currentRows.contains(index.row())) {
@@ -1139,6 +1245,9 @@ void MainWindow::actionSubtitleSelected(QModelIndex index) {
 }
 
 void MainWindow::playPulse(quint64 msecsElapsed) {
+  if (!m_script)
+    return;
+
   if (m_state == PLAYING) {
     ui->timer->setText(ts2tc(msecsElapsed));
     ui->userDelay->setText(ts2tc(m_player->delay()));
@@ -1147,14 +1256,11 @@ void MainWindow::playPulse(quint64 msecsElapsed) {
             .arg(ts2tc(msecsElapsed - m_script->totalDuration(), "hh:mm:ss")));
   }
 
-  if (!m_script)
-    return;
-
   // Update progression of subtitles
   QList<Subtitle *> previousSubtitles =
       m_script->previousSubtitles(msecsElapsed);
   QList<Subtitle *> nextSubtitles = m_script->nextSubtitles(msecsElapsed);
-  foreach (Subtitle *subtitle, m_script->subtitles()) {
+  for (Subtitle *subtitle : m_script->subtitles()) {
     qreal progressionCurrent = 0.0;
     qreal progressionNext = 0.0;
     if (m_currentSubtitles.contains(subtitle)) {
@@ -1207,6 +1313,44 @@ void MainWindow::subtitleChanged(QList<Subtitle *> p_currentSubtitles) {
   m_rowChanged = false;
 }
 
+void MainWindow::actionRecord(bool recording) {
+  if (recording) {
+    const QString error = m_recorder->start();
+    if (!error.isEmpty()) {
+      ui->actionRecord->setChecked(false);
+      QMessageBox::warning(this, tr("Recording error"), error);
+    } else {
+      m_recordingStatusTimer.start();
+      ui->recordingStatus->setText(tr("Recording: %1").arg("00:00:00.000"));
+    }
+    return;
+  }
+
+  const QString temporaryFileName = m_recorder->finish();
+  m_recordingStatusTimer.stop();
+  ui->recordingStatus->clear();
+  const QString recordingName =
+      QString("%1-%2.srt")
+          .arg(QFileInfo(m_script->fileName()).completeBaseName(),
+               QDateTime::currentDateTime().toString("yyyyMMdd-HH:mm:ss"));
+  const QString fileName = QFileDialog::getSaveFileName(
+      this, tr("Save recorded subtitles"), m_lastFolder + "/" + recordingName,
+      tr("SubRip subtitles (*.srt)"));
+  if (fileName.isEmpty())
+    return;
+
+  QFile source(temporaryFileName);
+  QFile destination(fileName);
+  if (!source.open(QIODevice::ReadOnly) ||
+      !destination.open(QIODevice::WriteOnly | QIODevice::Truncate) ||
+      destination.write(source.readAll()) < 0) {
+    QMessageBox::warning(this, tr("Unable to write file"),
+                         destination.errorString());
+  } else {
+    m_lastFolder = QFileInfo(fileName).absolutePath();
+  }
+}
+
 void MainWindow::highlightSubtitles(qlonglong elapsed) {
   // Reset all
   for (int row = 0; row < ui->tableWidget->rowCount(); row++) {
@@ -1224,7 +1368,7 @@ void MainWindow::highlightSubtitles(qlonglong elapsed) {
 
   if (m_script) {
     // Highlight next subtitles
-    foreach (Subtitle *e, m_script->nextSubtitles(elapsed)) {
+    for (Subtitle *e : m_script->nextSubtitles(elapsed)) {
       int row = m_tableMapping[e];
       for (int col = 0; col < ui->tableWidget->columnCount(); col++) {
         QTableWidgetItem *item = ui->tableWidget->item(row, col);
@@ -1234,7 +1378,7 @@ void MainWindow::highlightSubtitles(qlonglong elapsed) {
     }
 
     // Highlight current subtitles
-    foreach (Subtitle *e, m_currentSubtitles) {
+    for (Subtitle *e : std::as_const(m_currentSubtitles)) {
       int row = m_tableMapping[e];
       for (int col = 0; col < ui->tableWidget->columnCount(); col++) {
         QTableWidgetItem *item = ui->tableWidget->item(row, col);
@@ -1261,6 +1405,7 @@ QString MainWindow::ts2tc(int p_ts, QString format) {
 
 void MainWindow::setState(State p_state) {
   m_state = p_state;
+  ui->actionRecord->setEnabled(p_state != NODATA);
   switch (m_state) {
   case NODATA:
     ui->actionPlay->setEnabled(false);

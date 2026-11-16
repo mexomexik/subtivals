@@ -40,6 +40,9 @@
       </item>
       <item row="0" column="2" rowspan="2">
        <widget class="QCheckBox" name="enableSpeedFactor">
+        <property name="toolTip">
+         <string>Speed up/down shortcuts change speed by 10%; hold Shift to change it by 1%.</string>
+        </property>
         <property name="text">
          <string>Adjust speed</string>
         </property>
@@ -268,14 +271,38 @@
     </property>
     <addaction name="actionPreferences"/>
     <addaction name="actionShowMilliseconds"/>
+    <addaction name="menuDelayStep"/>
     <addaction name="actionPersistentHide"/>
     <addaction name="actionDarkMode"/>
     <addaction name="actionLargeText"/>
     <addaction name="actionLockScreenOnPlay"/>
     <addaction name="actionHideDesktop"/>
+    <addaction name="actionShowProjectionSingleScreen"/>
     <addaction name="actionEditShortcuts"/>
+    <addaction name="menuLanguage"/>
     <addaction name="actionShowRemoteOptions"/>
     <addaction name="actionAdvancedSettings"/>
+   </widget>
+   <widget class="QMenu" name="menuLanguage">
+    <property name="title">
+     <string>Language</string>
+    </property>
+    <addaction name="actionLanguageEnglish"/>
+    <addaction name="actionLanguageCatalan"/>
+    <addaction name="actionLanguageSpanish"/>
+    <addaction name="actionLanguageFrench"/>
+    <addaction name="actionLanguageItalian"/>
+   </widget>
+   <widget class="QMenu" name="menuDelayStep">
+    <property name="title">
+     <string>Delay step</string>
+    </property>
+    <addaction name="actionDelayStep40"/>
+    <addaction name="actionDelayStep42"/>
+    <addaction name="actionDelayStep100"/>
+    <addaction name="actionDelayStep250"/>
+    <addaction name="actionDelayStep500"/>
+    <addaction name="actionDelayStep1000"/>
    </widget>
    <widget class="QMenu" name="menuAide">
     <property name="title">
@@ -316,6 +343,7 @@
    <addaction name="actionPrevious"/>
    <addaction name="actionNext"/>
    <addaction name="actionStop"/>
+   <addaction name="actionRecord"/>
    <addaction name="separator"/>
    <addaction name="actionSubDelay"/>
    <addaction name="actionAddDelay"/>
@@ -323,7 +351,13 @@
    <addaction name="actionAutoHideEnded"/>
    <addaction name="actionHide"/>
   </widget>
-  <widget class="QStatusBar" name="statusBar"/>
+  <widget class="QStatusBar" name="statusBar">
+   <widget class="QLabel" name="recordingStatus">
+    <property name="text">
+     <string/>
+    </property>
+   </widget>
+  </widget>
   <widget class="QToolBar" name="toolBar">
    <property name="windowTitle">
     <string>toolBar</string>
@@ -347,7 +381,7 @@
     <string>Open</string>
    </property>
    <property name="shortcut">
-    <string>Ctrl+O</string>
+    <string notr="true">Ctrl+O</string>
    </property>
   </action>
   <action name="actionExit">
@@ -358,7 +392,7 @@
     <string>Quit</string>
    </property>
    <property name="shortcut">
-    <string>Ctrl+Q</string>
+    <string notr="true">Ctrl+Q</string>
    </property>
   </action>
   <action name="actionPlay">
@@ -376,7 +410,7 @@
     <string>Play</string>
    </property>
    <property name="shortcut">
-    <string>L</string>
+    <string notr="true">L</string>
    </property>
   </action>
   <action name="actionStop">
@@ -391,8 +425,17 @@
     <string>Stop</string>
    </property>
    <property name="shortcut">
-    <string>S</string>
+    <string notr="true">S</string>
    </property>
+  </action>
+  <action name="actionRecord">
+   <property name="icon">
+    <iconset resource="../resources/icons.qrc">
+     <normaloff>:/icons/record.svg</normaloff>:/icons/record.svg</iconset>
+   </property>
+   <property name="checkable"><bool>true</bool></property>
+   <property name="text"><string>Record</string></property>
+   <property name="toolTip"><string>Record displayed subtitles to an SRT file</string></property>
   </action>
   <action name="actionPreferences">
    <property name="checkable">
@@ -409,7 +452,7 @@
     <string>Show preferences</string>
    </property>
    <property name="shortcut">
-    <string>Ctrl+P</string>
+    <string notr="true">Ctrl+P</string>
    </property>
   </action>
   <action name="actionShowPreview">
@@ -427,7 +470,7 @@
     <string>Show operator preview panel</string>
    </property>
    <property name="shortcut">
-    <string>v</string>
+    <string notr="true">v</string>
    </property>
   </action>
   <action name="actionAddDelay">
@@ -445,7 +488,7 @@
     <string>+1/4 sec</string>
    </property>
    <property name="shortcut">
-    <string>+</string>
+    <string notr="true">+</string>
    </property>
   </action>
   <action name="actionSubDelay">
@@ -463,7 +506,7 @@
     <string>-1/4 sec</string>
    </property>
    <property name="shortcut">
-    <string>-</string>
+    <string notr="true">-</string>
    </property>
   </action>
   <action name="actionPause">
@@ -478,7 +521,7 @@
     <string>Pause</string>
    </property>
    <property name="shortcut">
-    <string>P</string>
+    <string notr="true">P</string>
    </property>
   </action>
   <action name="actionNext">
@@ -496,7 +539,7 @@
     <string>Activate current or go to next</string>
    </property>
    <property name="shortcut">
-    <string>Space</string>
+    <string notr="true">Space</string>
    </property>
   </action>
   <action name="actionHide">
@@ -511,7 +554,7 @@
     <string>Hide</string>
    </property>
    <property name="shortcut">
-    <string>H</string>
+    <string notr="true">H</string>
    </property>
   </action>
   <action name="actionPrevious">
@@ -529,7 +572,7 @@
     <string>Previous</string>
    </property>
    <property name="shortcut">
-    <string>PgUp</string>
+    <string notr="true">PgUp</string>
    </property>
   </action>
   <action name="actionEnableReload">
@@ -578,7 +621,7 @@
     <string>Hide timeout subtitles (manual mode)</string>
    </property>
    <property name="shortcut">
-    <string>Ctrl+T</string>
+    <string notr="true">Ctrl+T</string>
    </property>
   </action>
   <action name="actionShowHelp">
@@ -586,7 +629,7 @@
     <string>Online help...</string>
    </property>
    <property name="shortcut">
-    <string>F1</string>
+    <string notr="true">F1</string>
    </property>
   </action>
   <action name="actionDurationCorrection">
@@ -597,7 +640,7 @@
     <string>Duration correction</string>
    </property>
    <property name="shortcut">
-    <string>Ctrl+D</string>
+    <string notr="true">Ctrl+D</string>
    </property>
   </action>
   <action name="actionSpeedUp">
@@ -608,7 +651,7 @@
     <string>Adjust speed up (+1%)</string>
    </property>
    <property name="shortcut">
-    <string>Right</string>
+    <string notr="true">Right</string>
    </property>
   </action>
   <action name="actionSlowDown">
@@ -619,7 +662,7 @@
     <string>Adjust slow down  (-1%)</string>
    </property>
    <property name="shortcut">
-    <string>Left</string>
+    <string notr="true">Left</string>
    </property>
   </action>
   <action name="actionShowRemoteOptions">
@@ -686,6 +729,61 @@
     <string>Advanced settings...</string>
    </property>
   </action>
+  <action name="actionLanguageEnglish">
+   <property name="checkable"><bool>true</bool></property>
+   <property name="text"><string>English</string></property>
+   <property name="data"><string>en</string></property>
+  </action>
+  <action name="actionLanguageCatalan">
+   <property name="checkable"><bool>true</bool></property>
+   <property name="text"><string>Català</string></property>
+   <property name="data"><string>ca_ES</string></property>
+  </action>
+  <action name="actionLanguageSpanish">
+   <property name="checkable"><bool>true</bool></property>
+   <property name="text"><string>Español</string></property>
+   <property name="data"><string>es_ES</string></property>
+  </action>
+  <action name="actionLanguageFrench">
+   <property name="checkable"><bool>true</bool></property>
+   <property name="text"><string>Français</string></property>
+   <property name="data"><string>fr_FR</string></property>
+  </action>
+  <action name="actionLanguageItalian">
+   <property name="checkable"><bool>true</bool></property>
+   <property name="text"><string>Italiano</string></property>
+   <property name="data"><string>it_IT</string></property>
+  </action>
+  <action name="actionDelayStep40">
+   <property name="checkable"><bool>true</bool></property>
+   <property name="text"><string>1/25 sec</string></property>
+   <property name="data"><number>40</number></property>
+  </action>
+  <action name="actionDelayStep42">
+   <property name="checkable"><bool>true</bool></property>
+   <property name="text"><string>1/24 sec</string></property>
+   <property name="data"><number>42</number></property>
+  </action>
+  <action name="actionDelayStep100">
+   <property name="checkable"><bool>true</bool></property>
+   <property name="text"><string>1/10 sec</string></property>
+   <property name="data"><number>100</number></property>
+  </action>
+  <action name="actionDelayStep250">
+   <property name="checkable"><bool>true</bool></property>
+   <property name="text"><string>1/4 sec</string></property>
+   <property name="data"><number>250</number></property>
+  </action>
+  <action name="actionDelayStep500">
+   <property name="checkable"><bool>true</bool></property>
+   <property name="text"><string>1/2 sec</string></property>
+   <property name="data"><number>500</number></property>
+  </action>
+  <action name="actionDelayStep1000">
+   <property name="checkable"><bool>true</bool></property>
+   <property name="text"><string>1 sec</string></property>
+   <property name="data"><number>1000</number></property>
+  </action>
   <action name="actionDarkMode">
    <property name="checkable">
     <bool>true</bool>
@@ -730,12 +828,59 @@
     <string>Fill screen with color</string>
    </property>
   </action>
+  <action name="actionShowProjectionSingleScreen">
+   <property name="checkable">
+    <bool>true</bool>
+   </property>
+   <property name="text">
+    <string>Show projection on single screen</string>
+   </property>
+   <property name="toolTip">
+    <string>Show the projection window even if there is only one screen</string>
+   </property>
+  </action>
  </widget>
  <layoutdefault spacing="6" margin="11"/>
  <resources>
   <include location="../resources/icons.qrc"/>
  </resources>
  <connections>
+  <connection>
+   <sender>actionDelayStep40</sender>
+   <signal>triggered(bool)</signal>
+   <receiver>MainWindow</receiver>
+   <slot>delayStepSelected()</slot>
+  </connection>
+  <connection>
+   <sender>actionDelayStep42</sender>
+   <signal>triggered(bool)</signal>
+   <receiver>MainWindow</receiver>
+   <slot>delayStepSelected()</slot>
+  </connection>
+  <connection>
+   <sender>actionDelayStep100</sender>
+   <signal>triggered(bool)</signal>
+   <receiver>MainWindow</receiver>
+   <slot>delayStepSelected()</slot>
+  </connection>
+  <connection>
+   <sender>actionDelayStep250</sender>
+   <signal>triggered(bool)</signal>
+   <receiver>MainWindow</receiver>
+   <slot>delayStepSelected()</slot>
+  </connection>
+  <connection>
+   <sender>actionDelayStep500</sender>
+   <signal>triggered(bool)</signal>
+   <receiver>MainWindow</receiver>
+   <slot>delayStepSelected()</slot>
+  </connection>
+  <connection>
+   <sender>actionDelayStep1000</sender>
+   <signal>triggered(bool)</signal>
+   <receiver>MainWindow</receiver>
+   <slot>delayStepSelected()</slot>
+  </connection>
   <connection>
    <sender>actionOpen</sender>
    <signal>triggered()</signal>
@@ -1298,6 +1443,7 @@
   </connection>
  </connections>
  <slots>
+  <slot>delayStepSelected()</slot>
   <signal>configChanged()</signal>
   <slot>actionOpen()</slot>
   <slot>actionPlay()</slot>

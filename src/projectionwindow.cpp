@@ -27,9 +27,10 @@
 #include "macwindowhelper.h"
 
 ProjectionWindow::ProjectionWindow(QWidget *parent)
-    : SubtitlesForm(parent), m_hideDesktop(false), m_monitor(-1),
-      m_resizable(true) {
-  Qt::WindowFlags flags = Qt::FramelessWindowHint | Qt::WindowStaysOnTopHint;
+    : SubtitlesForm(parent), m_hideDesktop(false),
+      m_hideDesktopRequested(false), m_monitor(-1), m_resizable(true) {
+  Qt::WindowFlags flags = Qt::FramelessWindowHint | Qt::WindowStaysOnTopHint |
+                          Qt::NoDropShadowWindowHint;
 #ifdef WIN32
   flags |= Qt::SubWindow;
 #endif
@@ -56,6 +57,8 @@ ProjectionWindow::~ProjectionWindow() {}
 void ProjectionWindow::screenResizable(bool state) { m_resizable = state; }
 
 void ProjectionWindow::toggleHideDesktop(bool state) {
+  // Remember what was asked, to restore it when a screen is plugged back.
+  m_hideDesktopRequested = state;
   // Do not hide desktop if projection window is on primary screen.
   int idxPrimary =
       QGuiApplication::screens().indexOf(QGuiApplication::primaryScreen());
@@ -94,6 +97,8 @@ QRect ProjectionWindow::subtitlesBounds() {
 
 // Slot called when UI tells us to change geometry relative to a given screen.
 void ProjectionWindow::changeGeometry(int monitor, const QRect &r) {
+  SubtitlesForm::changeGeometry(monitor, r);
+
   const auto screens = QGuiApplication::screens();
   // Validate monitor index
   if (monitor < 0 || monitor >= screens.size()) {
@@ -111,7 +116,7 @@ void ProjectionWindow::changeGeometry(int monitor, const QRect &r) {
   m_dpi = screens.at(monitor)->logicalDotsPerInchY();
   m_subtitlesGeomBottomScreenRelative = r;
   // Refresh widget (will call `setGeometry()`):
-  toggleHideDesktop(m_hideDesktop);
+  toggleHideDesktop(m_hideDesktopRequested);
 }
 
 void ProjectionWindow::mousePressEvent(QMouseEvent *e) {

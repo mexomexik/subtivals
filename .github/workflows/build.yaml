@@ -156,7 +156,7 @@ jobs:
           if-no-files-found: error
 
   build-mac:
-    runs-on: macos-15
+    runs-on: macos-26
     environment: build
     strategy:
       matrix:
@@ -184,7 +184,7 @@ jobs:
 
       - name: Compile
         run: |
-          cmake -S . -B build -DCMAKE_BUILD_TYPE="${{ env.BUILD_TYPE }}" -DPACKAGE_VERSION="${{ env.PACKAGE_VERSION }}"
+          cmake -S . -B build -DCMAKE_BUILD_TYPE="${{ env.BUILD_TYPE }}" -DPACKAGE_VERSION="${{ env.PACKAGE_VERSION }}" -DCMAKE_OSX_DEPLOYMENT_TARGET=12.0
           cmake --build build --parallel
 
       - name: Deploy
@@ -243,7 +243,7 @@ jobs:
 
       - name: Compile
         run: |
-          cmake -S . -B build -DCMAKE_BUILD_TYPE="${{ env.BUILD_TYPE }}" -DPACKAGE_VERSION="${{ env.PACKAGE_VERSION }}"
+          cmake -S . -B build -DCMAKE_BUILD_TYPE="${{ env.BUILD_TYPE }}" -DPACKAGE_VERSION="${{ env.PACKAGE_VERSION }}" -DCMAKE_OSX_DEPLOYMENT_TARGET=12.0
           cmake --build build --parallel
 
       - name: Deploy
